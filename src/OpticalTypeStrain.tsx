@@ -20,6 +20,10 @@ export type OpticalTypeStrainProps = {
   push?: number;
   /** Max skew in degrees. */
   skew?: number;
+  /** Continuously sweep a virtual pointer (homepage preview). */
+  autoPlay?: boolean;
+  /** One full sweep duration in ms when autoPlay is on. */
+  autoPlayDuration?: number;
 };
 
 type Glyph = {
@@ -49,6 +53,8 @@ export function OpticalTypeStrain({
   radius = 120,
   push = 14,
   skew = 12,
+  autoPlay = false,
+  autoPlayDuration = 3200,
 }: OpticalTypeStrainProps) {
   const rootRef = useRef<HTMLParagraphElement>(null);
   const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
@@ -83,14 +89,11 @@ export function OpticalTypeStrain({
     });
   }, []);
 
-  const strain = useCallback(
-    (clientX: number, clientY: number) => {
+  const strainAt = useCallback(
+    (px: number, py: number) => {
       const root = rootRef.current;
       if (!root || reducedMotion.current) return;
 
-      const rootBox = root.getBoundingClientRect();
-      const px = clientX - rootBox.left;
-      const py = clientY - rootBox.top;
       root.dataset.active = "true";
 
       charRefs.current.forEach((el, i) => {
@@ -109,13 +112,11 @@ export function OpticalTypeStrain({
           return;
         }
 
-        // Stronger near the pointer, falls off smoothly.
         const t = 1 - dist / radius;
         const force = t * t * (3 - 2 * t);
         const nx = dx / dist;
         const ny = dy / dist;
 
-        // Push glyphs away from the pointer + shear along the force vector.
         el.style.setProperty("--ots-x", `${nx * push * force}px`);
         el.style.setProperty("--ots-y", `${ny * push * force * 0.65}px`);
         el.style.setProperty("--ots-skew-x", `${-nx * skew * force}deg`);
@@ -136,7 +137,55 @@ export function OpticalTypeStrain({
     const ro = new ResizeObserver(measure);
     ro.observe(root);
 
-    const onMove = (e: PointerEvent) => strain(e.clientX, e.clientY);
+    if (autoPlay) {
+      if (reducedMotion.current) return () => ro.disconnect();
+
+      let frame = 0;
+      let start = performance.now();
+      const holdMs = 700;
+
+      const tick = (now: number) => {
+        const cycle = autoPlayDuration + holdMs;
+        const elapsed = (now - start) % cycle;
+
+        if (elapsed >= autoPlayDuration) {
+          reset();
+        } else {
+          measure();
+          const centers = centersRef.current.filter(
+            (c, i) => charRefs.current[i] && (c.x !== 0 || c.y !== 0),
+          );
+          if (centers.length) {
+            const minX = Math.min(...centers.map((c) => c.x)) - 8;
+            const maxX = Math.max(...centers.map((c) => c.x)) + 8;
+            const minY = Math.min(...centers.map((c) => c.y));
+            const maxY = Math.max(...centers.map((c) => c.y));
+            const midY = (minY + maxY) / 2;
+            const amp = Math.max(10, (maxY - minY) * 0.35 + 8);
+            const p = elapsed / autoPlayDuration;
+            // Ease-in-out sweep left → right, with a soft vertical wave.
+            const eased = p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2;
+            const x = minX + (maxX - minX) * eased;
+            const y = midY + Math.sin(p * Math.PI * 2) * amp;
+            strainAt(x, y);
+          }
+        }
+
+        frame = requestAnimationFrame(tick);
+      };
+
+      frame = requestAnimationFrame(tick);
+      return () => {
+        ro.disconnect();
+        cancelAnimationFrame(frame);
+        reset();
+      };
+    }
+
+    const onMove = (e: PointerEvent) => {
+      const rootBox = root.getBoundingClientRect();
+      strainAt(e.clientX - rootBox.left, e.clientY - rootBox.top);
+    };
     const onLeave = () => reset();
 
     root.addEventListener("pointermove", onMove);
@@ -149,9 +198,8 @@ export function OpticalTypeStrain({
       root.removeEventListener("pointerleave", onLeave);
       root.removeEventListener("pointercancel", onLeave);
     };
-  }, [measure, reset, strain, glyphs.length]);
+  }, [autoPlay, autoPlayDuration, measure, reset, strainAt, glyphs.length]);
 
-  // Group by line for block layout
   const lines: Glyph[][] = [];
   for (const g of glyphs) {
     if (!lines[g.line]) lines[g.line] = [];
@@ -172,6 +220,7 @@ export function OpticalTypeStrain({
         } as CSSProperties
       }
       data-active="false"
+      data-autoplay={autoPlay ? "true" : "false"}
       aria-label={text.replace(/\n/g, " ")}
     >
       {lines.map((line, li) => (
