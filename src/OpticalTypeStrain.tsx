@@ -57,6 +57,7 @@ export function OpticalTypeStrain({
   autoPlayDuration = 3200,
 }: OpticalTypeStrainProps) {
   const rootRef = useRef<HTMLParagraphElement>(null);
+  const cursorRef = useRef<HTMLSpanElement>(null);
   const charRefs = useRef<(HTMLSpanElement | null)[]>([]);
   const centersRef = useRef<{ x: number; y: number }[]>([]);
   const reducedMotion = useRef(false);
@@ -77,9 +78,20 @@ export function OpticalTypeStrain({
     });
   }, []);
 
+  const setCursor = useCallback((visible: boolean, x = 0, y = 0) => {
+    const root = rootRef.current;
+    const cursor = cursorRef.current;
+    if (!root || !cursor) return;
+    root.dataset.cursor = visible ? "true" : "false";
+    if (visible) {
+      cursor.style.transform = `translate3d(${x - 2}px, ${y - 1}px, 0)`;
+    }
+  }, []);
+
   const reset = useCallback(() => {
     const root = rootRef.current;
     if (root) root.dataset.active = "false";
+    setCursor(false);
     charRefs.current.forEach((el) => {
       if (!el) return;
       el.style.setProperty("--ots-x", "0px");
@@ -87,7 +99,7 @@ export function OpticalTypeStrain({
       el.style.setProperty("--ots-skew-x", "0deg");
       el.style.setProperty("--ots-scale-y", "1");
     });
-  }, []);
+  }, [setCursor]);
 
   const strainAt = useCallback(
     (px: number, py: number) => {
@@ -163,10 +175,10 @@ export function OpticalTypeStrain({
             const midY = (minY + maxY) / 2;
             const amp = Math.max(10, (maxY - minY) * 0.35 + 8);
             const p = elapsed / autoPlayDuration;
-            // Ease-in-out sweep left → right, with a soft vertical wave.
             const eased = p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2;
             const x = minX + (maxX - minX) * eased;
             const y = midY + Math.sin(p * Math.PI * 2) * amp;
+            setCursor(true, x, y);
             strainAt(x, y);
           }
         }
@@ -198,7 +210,15 @@ export function OpticalTypeStrain({
       root.removeEventListener("pointerleave", onLeave);
       root.removeEventListener("pointercancel", onLeave);
     };
-  }, [autoPlay, autoPlayDuration, measure, reset, strainAt, glyphs.length]);
+  }, [
+    autoPlay,
+    autoPlayDuration,
+    measure,
+    reset,
+    setCursor,
+    strainAt,
+    glyphs.length,
+  ]);
 
   const lines: Glyph[][] = [];
   for (const g of glyphs) {
@@ -221,8 +241,25 @@ export function OpticalTypeStrain({
       }
       data-active="false"
       data-autoplay={autoPlay ? "true" : "false"}
+      data-cursor="false"
       aria-label={text.replace(/\n/g, " ")}
     >
+      {autoPlay ? (
+        <span ref={cursorRef} className="ots-cursor" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path
+              d="M5.5 3.2 18.7 12.1c.55.37.3 1.23-.38 1.3l-5.2.52-.02.07 2.35 5.85c.24.6-.3 1.22-.9.99l-2.55-.97-2.2 2.42c-.45.5-1.3.18-1.3-.48V4.05c0-.72.82-1.12 1.4-.85Z"
+              fill="currentColor"
+            />
+            <path
+              d="M5.5 3.2 18.7 12.1c.55.37.3 1.23-.38 1.3l-5.2.52-.02.07 2.35 5.85c.24.6-.3 1.22-.9.99l-2.55-.97-2.2 2.42c-.45.5-1.3.18-1.3-.48V4.05c0-.72.82-1.12 1.4-.85Z"
+              stroke="color-mix(in srgb, currentColor 20%, #fff)"
+              strokeWidth="1.25"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      ) : null}
       {lines.map((line, li) => (
         <span key={li} className="ots-line">
           {line.map((g) => {
