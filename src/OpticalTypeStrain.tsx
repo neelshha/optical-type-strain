@@ -84,7 +84,8 @@ export function OpticalTypeStrain({
     if (!root || !cursor) return;
     root.dataset.cursor = visible ? "true" : "false";
     if (visible) {
-      cursor.style.transform = `translate3d(${x - 2}px, ${y - 1}px, 0)`;
+      // Hotspot is the tip of the classic pointer (top-left of the artboard).
+      cursor.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     }
   }, []);
 
@@ -246,15 +247,13 @@ export function OpticalTypeStrain({
     >
       {autoPlay ? (
         <span ref={cursorRef} className="ots-cursor" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none">
+          {/* Classic OS arrow pointer — tip at 0,0 */}
+          <svg viewBox="0 0 24 32" fill="none">
             <path
-              d="M5.5 3.2 18.7 12.1c.55.37.3 1.23-.38 1.3l-5.2.52-.02.07 2.35 5.85c.24.6-.3 1.22-.9.99l-2.55-.97-2.2 2.42c-.45.5-1.3.18-1.3-.48V4.05c0-.72.82-1.12 1.4-.85Z"
-              fill="currentColor"
-            />
-            <path
-              d="M5.5 3.2 18.7 12.1c.55.37.3 1.23-.38 1.3l-5.2.52-.02.07 2.35 5.85c.24.6-.3 1.22-.9.99l-2.55-.97-2.2 2.42c-.45.5-1.3.18-1.3-.48V4.05c0-.72.82-1.12 1.4-.85Z"
-              stroke="color-mix(in srgb, currentColor 20%, #fff)"
-              strokeWidth="1.25"
+              d="M1 1v26.5l6.2-6.1 3.7 8.9 3.6-1.5-3.7-8.8H22L1 1Z"
+              fill="#fff"
+              stroke="#111"
+              strokeWidth="1.5"
               strokeLinejoin="round"
             />
           </svg>
