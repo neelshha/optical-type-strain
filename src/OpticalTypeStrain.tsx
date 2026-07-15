@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   type CSSProperties,
+  type ReactNode,
 } from "react";
 
 const DEFAULT_TEXT =
@@ -32,6 +33,10 @@ type Glyph = {
   index: number;
 };
 
+type Segment =
+  | { type: "word"; glyphs: Glyph[] }
+  | { type: "space"; glyph: Glyph };
+
 function splitText(text: string): Glyph[] {
   const glyphs: Glyph[] = [];
   let line = 0;
@@ -45,6 +50,29 @@ function splitText(text: string): Glyph[] {
     index += 1;
   }
   return glyphs;
+}
+
+/** Keep mid-word breaks from happening when each letter is inline-block. */
+function segmentLine(line: Glyph[]): Segment[] {
+  const segments: Segment[] = [];
+  let word: Glyph[] = [];
+
+  const flushWord = () => {
+    if (!word.length) return;
+    segments.push({ type: "word", glyphs: word });
+    word = [];
+  };
+
+  for (const g of line) {
+    if (g.char === " ") {
+      flushWord();
+      segments.push({ type: "space", glyph: g });
+    } else {
+      word.push(g);
+    }
+  }
+  flushWord();
+  return segments;
 }
 
 export function OpticalTypeStrain({
@@ -63,6 +91,15 @@ export function OpticalTypeStrain({
   const reducedMotion = useRef(false);
 
   const glyphs = useMemo(() => splitText(text), [text]);
+
+  const lines = useMemo(() => {
+    const grouped: Glyph[][] = [];
+    for (const g of glyphs) {
+      if (!grouped[g.line]) grouped[g.line] = [];
+      grouped[g.line]!.push(g);
+    }
+    return grouped.map(segmentLine);
+  }, [glyphs]);
 
   const measure = useCallback(() => {
     const root = rootRef.current;
@@ -84,7 +121,6 @@ export function OpticalTypeStrain({
     if (!root || !cursor) return;
     root.dataset.cursor = visible ? "true" : "false";
     if (visible) {
-      // Hotspot is the tip of the classic pointer (top-left of the artboard).
       cursor.style.transform = `translate3d(${x}px, ${y}px, 0)`;
     }
   }, []);
@@ -221,13 +257,31 @@ export function OpticalTypeStrain({
     glyphs.length,
   ]);
 
-  const lines: Glyph[][] = [];
-  for (const g of glyphs) {
-    if (!lines[g.line]) lines[g.line] = [];
-    lines[g.line]!.push(g);
-  }
+  const renderSegments = (segments: Segment[]): ReactNode =>
+    segments.map((segment) => {
+      if (segment.type === "space") {
+        return (
+          <span key={`s-${segment.glyph.index}`} className="ots-space" aria-hidden />
+        );
+      }
 
-  let refIndex = 0;
+      return (
+        <span key={`w-${segment.glyphs[0]!.index}`} className="ots-word">
+          {segment.glyphs.map((g) => (
+            <span
+              key={g.index}
+              className="ots-char"
+              aria-hidden
+              ref={(el) => {
+                charRefs.current[g.index] = el;
+              }}
+            >
+              {g.char}
+            </span>
+          ))}
+        </span>
+      );
+    });
 
   return (
     <p
@@ -247,7 +301,6 @@ export function OpticalTypeStrain({
     >
       {autoPlay ? (
         <span ref={cursorRef} className="ots-cursor" aria-hidden="true">
-          {/* Classic OS arrow pointer — tip at 0,0 */}
           <svg viewBox="0 0 24 32" fill="none">
             <path
               d="M1 1v26.5l6.2-6.1 3.7 8.9 3.6-1.5-3.7-8.8H22L1 1Z"
@@ -259,26 +312,9 @@ export function OpticalTypeStrain({
           </svg>
         </span>
       ) : null}
-      {lines.map((line, li) => (
+      {lines.map((segments, li) => (
         <span key={li} className="ots-line">
-          {line.map((g) => {
-            const i = refIndex++;
-            if (g.char === " ") {
-              return <span key={i} className="ots-space" aria-hidden />;
-            }
-            return (
-              <span
-                key={i}
-                className="ots-char"
-                aria-hidden
-                ref={(el) => {
-                  charRefs.current[i] = el;
-                }}
-              >
-                {g.char}
-              </span>
-            );
-          })}
+          {renderSegments(segments)}
         </span>
       ))}
     </p>

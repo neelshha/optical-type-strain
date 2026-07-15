@@ -19,6 +19,12 @@
   display: block;
 }
 
+/* Word wrappers prevent mid-word wraps when letters are inline-block. */
+.ots-word {
+  display: inline-block;
+  white-space: nowrap;
+}
+
 .ots-char {
   display: inline-block;
   will-change: transform;
@@ -34,7 +40,7 @@
 
 .ots-space {
   display: inline-block;
-  width: 0.35em;
+  width: 0.32em;
 }
 
 .ots-cursor {
